@@ -1,0 +1,7 @@
+[project]
+name = "data_gen"
+version = "0.1.0"
+dependencies = []
+
+[tool.setuptools]
+packages = ["loader", "generator", "utilities","elastic","skews"]

@@ -1,0 +1,22 @@
+services:
+  database:
+    networks:
+      - elastic-start-local_default
+    container_name: test-bench-database
+    hostname: database
+    image: postgis/postgis:latest
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+
+networks:
+  elastic-start-local_default:
+    external: true
