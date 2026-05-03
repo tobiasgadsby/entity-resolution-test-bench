@@ -39,3 +39,7 @@ export type SkewedData = {
     first_name: string,
     last_name: string
 }
+
+export type GeospatialTechniqueRequest = {
+    dataset_id: string
+}

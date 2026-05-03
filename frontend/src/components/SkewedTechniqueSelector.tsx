@@ -8,7 +8,7 @@ import type {SkewedTechnique} from '../api.tsx';
 export default function SkewedTechniqueSelector({ techniques, setTechniques }: SkewedTechnique) {
 
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-    const [menuItems, setMenuitems] = useState<SkewedTechnique[]>([{'id': 'SWAP_CHAR', 'name': 'Character Swap'}, {'id': 'REMOVE_FIELD', 'name': 'Remove data from a field'}]);
+    const [menuItems, setMenuitems] = useState<SkewedTechnique[]>([{'id': 'SWAP_CHAR', 'name': 'Character Swap'}, {'id': 'REMOVE_FIELD', 'name': 'Remove data from a field'}, {'id': 'LOCATION_DRIFT', 'name': 'Location Drift'}]);
     const open = Boolean(anchorEl);
     const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
         setAnchorEl(event.currentTarget);

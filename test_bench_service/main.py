@@ -11,7 +11,10 @@ from generator.main import generate_base_records, generate_skewed_data, load_bas
 from loader.main import generate_dataset, load_base_records, load_skewed_records, create_schema, create_run_history
 from pydantic import BaseModel
 from starlette.middleware.cors import CORSMiddleware
-from utilities.main import database_cursor, database_connection, delete_dataset, dict_database_cursor
+
+from test_bench_service.techniques.geospatial import geospatial_distance_matching
+from test_bench_service.utilities.main import calculate_confusion_matrix
+from utilities.main import database_cursor, database_connection, delete_dataset, dict_database_cursor, fetch_all
 
 from test_bench_service.techniques.levenstein import elasticsearch_levenstein_matching
 
@@ -70,53 +73,22 @@ async def data_gen(name: str, count: int, skewed_techniques: list[str] = Query(d
 async def dataset_delete(dataset_id: str):
     delete_dataset(dataset_id)
 
+@app.post('/techniques/geospatial')
+async def geospatial_matching(dataset_id: str):
+    print("geospatial matching")
+    records = fetch_all(dataset_id, False)
+    result = geospatial_distance_matching(records, dataset_id)
+    confusion_matrix, true_hits, false_hits = calculate_confusion_matrix(records, result)
+    create_run_history(dataset_id, confusion_matrix, 'geospatial', true_hits, false_hits)
+
+
 @app.post('/techniques/levenstein')
 async def levenstein_matching(dataset_id: str):
     print("levenstein matching")
-    with database_connection() as connection:
-        with database_cursor(connection) as cursor:
-            cursor.execute("SELECT * FROM skewed_data WHERE dataset_id = %s", (dataset_id,))
-            records = cursor.fetchall()
-            print("records: ", records)
-            result = elasticsearch_levenstein_matching(records, get_elasticsearch_client(), dataset_id)
-            confusion_matrix = ConfusionMatrix(
-                total_records=len(records),
-                true_positives=0,
-                false_positives=0,
-                true_negatives=0,
-                false_negatives=0
-            )
-            true_hits = []
-            false_hits = []
-            for record, res in zip(records, result['responses']):
-                print('record: ',record)
-                expected_id = record[2]
-                hits = res['hits']['hits']
-
-                returned_ids = [hit['_source']['id'] for hit in hits]
-
-                print('expected: ',expected_id)
-                print('returned: ',returned_ids)
-
-                if expected_id in returned_ids:
-                    confusion_matrix.true_positives += 1
-
-                    confusion_matrix.false_positives += sum(
-                        1 for _id in returned_ids if _id != expected_id
-                    )
-
-                    confusion_matrix.true_negatives += len(records) - len(returned_ids)
-
-                    true_hits.append(expected_id)
-
-                    false_hits.extend([_i for _i in returned_ids if _i != expected_id])
-                else:
-                    confusion_matrix.false_negatives += 1
-                    confusion_matrix.true_negatives += len(records) - len(returned_ids) - 1
-                    confusion_matrix.false_positives += len(returned_ids)
-                    false_hits.extend(returned_ids)
-
-            create_run_history(dataset_id, confusion_matrix, 'levenshtein', true_hits, false_hits)
+    records = fetch_all(dataset_id, False)
+    result = elasticsearch_levenstein_matching(records, get_elasticsearch_client(), dataset_id)
+    confusion_matrix, true_hits, false_hits = calculate_confusion_matrix(records, result)
+    create_run_history(dataset_id, confusion_matrix, 'levenshtein', true_hits, false_hits)
 
 @app.get('/data-gen/datasets')
 async def get_datasets():

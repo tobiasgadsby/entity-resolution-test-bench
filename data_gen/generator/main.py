@@ -6,7 +6,7 @@ from io import StringIO
 from faker import Faker
 from fastapi import UploadFile
 
-from skews.main import swap_chars
+from skews.main import swap_chars, location_drift
 from utilities.main import database_connection, database_cursor
 
 
@@ -46,6 +46,11 @@ def generate_skewed_data(dataset_id, records, skewed_techniques):
                 case 'REMOVE_FIELD':
                     skewed_record = record
                     skewed_record[1] = ""
+                    skewed_record.append(record[0])
+                    skewed_records.append(skewed_record)
+                case 'LOCATION_DRIFT':
+                    skewed_record = record
+                    skewed_record[3], skewed_record[4] = location_drift(skewed_record[3], skewed_record[4], 0.2)
                     skewed_record.append(record[0])
                     skewed_records.append(skewed_record)
     print("Skewed record count: ",len(skewed_records))

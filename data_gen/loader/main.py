@@ -166,7 +166,10 @@ def load_base_records(records: list[list[str]], dataset_id: str):
                         'id': row[0],
                         'first_name': row[1],
                         'last_name': row[2],
-                        'location': f'POINT (${row[3]} ${row[4]})',
+                        'location': {
+                            "lon": row[3],
+                            "lat": row[4]
+                        },
                     }
                 })
 
