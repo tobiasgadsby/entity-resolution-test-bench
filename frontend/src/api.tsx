@@ -29,7 +29,8 @@ export type BaseData = {
     id: string,
     dataset_id: string,
     first_name: string,
-    last_name: string
+    last_name: string,
+    full_name: string[]
 }
 
 export type SkewedData = {
@@ -40,6 +41,18 @@ export type SkewedData = {
     last_name: string
 }
 
-export type GeospatialTechniqueRequest = {
+export type SemanticTechniqueRequest = {
+    dataset_id: string,
+    k_nearest_neighbours: number,
+    num_of_candidates: number,
+}
+
+export type TechniqueRequest = {
     dataset_id: string
+}
+
+export type LevenshteinRequest = {
+    dataset_id: string;
+    levenshteinFuzziness: number;
+    levenshteinMinShouldMatch: number;
 }

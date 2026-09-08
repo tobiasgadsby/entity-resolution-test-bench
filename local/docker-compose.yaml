@@ -4,7 +4,9 @@ services:
       - elastic-start-local_default
     container_name: test-bench-database
     hostname: database
-    image: postgis/postgis:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "5432:5432"
     environment:

@@ -44,10 +44,10 @@ export default function FileInput({title, setFile}: props) {
             </div>
             <VisuallyHiddenInput
             type="file"
+            accept='.csv'
             onChange={(event) => uploadFile.mutate({event})}
             multiple
             />
         </label>
-        <VisuallyHiddenInput id="file-upload" type="file"/>
     </>
 }

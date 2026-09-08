@@ -1,9 +1,14 @@
 import uuid
+from typing import List
+
 from fastapi import HTTPException
 
 import psycopg
 from elasticsearch import helpers
 from datetime import datetime, timezone
+
+from generator.hashing import build_index
+from test_bench_service.utilities.models import BaseDataRecord, SkewedDataRecord
 from utilities.main import database_cursor, database_connection
 from data_gen.elastic.configuration import get_elasticsearch_client
 from utilities.models import ConfusionMatrix
@@ -16,6 +21,7 @@ def create_schema():
             cursor.execute('''
             
                 CREATE EXTENSION IF NOT EXISTS postgis;
+                CREATE EXTENSION IF NOT EXISTS vector;
 
                 CREATE TABLE IF NOT EXISTS dataset (
                     id varchar CONSTRAINT primary_key_dataset PRIMARY KEY,
@@ -32,6 +38,11 @@ def create_schema():
                     dataset_id varchar,
                     first_name varchar,
                     last_name varchar,
+                    full_names varchar ARRAY[3],
+                    phone_number varchar,
+                    address_lines varchar ARRAY[3],
+                    postal_code varchar,
+                    country varchar,
                     location geography(Point, 4326),
                     CONSTRAINT fk_base_dataset
                         FOREIGN KEY (dataset_id)
@@ -45,7 +56,13 @@ def create_schema():
                     base_data_id varchar,
                     first_name varchar,
                     last_name varchar,
+                    full_names varchar ARRAY[3],
+                    phone_number varchar,
+                    address_lines varchar ARRAY[3],
+                    postal_code varchar,
+                    country varchar,
                     location geography(Point, 4326),
+                    graph_vector vector(64),
 
                     CONSTRAINT fk_skewed_dataset
                         FOREIGN KEY (dataset_id)
@@ -116,7 +133,7 @@ def generate_dataset(dataset_name: str):
                     detail={'error_code': 'UNIQUE_VIOLATION'}
                 )
 
-def load_base_records(records: list[list[str]], dataset_id: str):
+def load_base_records(records: List[BaseDataRecord], dataset_id: str, embeddings, graph):
     with database_connection() as connection:
         with database_cursor(connection) as cursor:
 
@@ -124,10 +141,10 @@ def load_base_records(records: list[list[str]], dataset_id: str):
 
             cursor.executemany(
                 """
-                INSERT INTO base_data (id, first_name, last_name, location, dataset_id)
-                VALUES (%s, %s, %s, ST_SetSRID(ST_MakePoint(%s,%s), 4326), %s)
+                INSERT INTO base_data (id, first_name, last_name, location, dataset_id, full_names, address_lines, postal_code, country, phone_number)
+                VALUES (%s, %s, %s, ST_SetSRID(ST_MakePoint(%s,%s), 4326), %s, %s, %s, %s, %s, %s)
                 """,
-                [(r[0], r[1], r[2], r[3], r[4], str(dataset_id)) for r in records[1:]]
+                [(r.id, r.names.first_name, r.names.last_name, r.longitude, r.latitude, str(dataset_id), r.names.full_names, r.addresses.address_lines, r.addresses.postal_code, r.addresses.country, r.phone_number) for r in records]
             )
 
             cursor.execute('''
@@ -150,7 +167,27 @@ def load_base_records(records: list[list[str]], dataset_id: str):
                             'id': {'type': 'keyword'},
                             'first_name': {'type': 'text'},
                             'last_name': {'type': 'text'},
+                            'full_names': {'type': 'text'},
+                            'phone_number': {'type': 'text'},
+                            'address_lines': {'type': 'text'},
+                            'postal_code': {'type': 'text'},
+                            'country': {'type': 'text'},
                             'location': {'type': 'geo_point'},
+                            "embedding_vector": {
+                                "type": "dense_vector",
+                                "dims": 768,
+                                "index": True,
+                                "similarity": "dot_product"
+                            },
+                            'graphing_vector': {
+                                'type': 'dense_vector',
+                                'dims': 64,
+                                'index': True,
+                                'similarity': 'cosine'
+                            },
+                            "lsh_buckets": {
+                                "type": "keyword"
+                            }
                         }
                     }
                 }
@@ -158,18 +195,28 @@ def load_base_records(records: list[list[str]], dataset_id: str):
 
             elastic_records = []
 
-            for row in records[1:]:
+            records = build_index(records)
+
+            for row, embedding, node in zip(records, embeddings, graph):
                 elastic_records.append({
                     '_index': dataset_id,
-                    '_id': row[0],
+                    '_id': row.id,
                     '_source': {
-                        'id': row[0],
-                        'first_name': row[1],
-                        'last_name': row[2],
+                        'id': row.id,
+                        'first_name': row.names.first_name,
+                        'last_name': row.names.last_name,
+                        'full_names': row.names.full_names,
+                        'phone_number': row.phone_number,
+                        'address_lines': row.addresses.address_lines,
+                        'postal_code': row.addresses.postal_code,
+                        'country': row.addresses.country,
                         'location': {
-                            "lon": row[3],
-                            "lat": row[4]
+                            "lon": row.longitude,
+                            "lat": row.latitude
                         },
+                        "embedding_vector": embedding.tolist(),
+                        'graphing_vector': node,
+                        "lsh_buckets": row.lsh_buckets
                     }
                 })
 
@@ -180,12 +227,12 @@ def load_base_records(records: list[list[str]], dataset_id: str):
             connection.close()
             return dataset_id
 
-def load_skewed_records(skewed_records: list[list[str]], dataset_id):
+def load_skewed_records(skewed_records: list[SkewedDataRecord], dataset_id, graph_vectors):
     with database_connection() as connection:
         with database_cursor(connection) as cursor:
             cursor.executemany(
-                "INSERT INTO skewed_data (id, first_name, last_name, location, base_data_id, dataset_id) VALUES (%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s)",
-                [(r[0], r[1], r[2], r[3], r[4], r[5], str(dataset_id)) for r in skewed_records[1:]]
+                "INSERT INTO skewed_data (id, first_name, last_name, location, base_data_id, dataset_id, graph_vector, full_names, address_lines, postal_code, country, phone_number) VALUES (%s, %s, %s, ST_SetSRID(ST_MakePoint(%s, %s), 4326), %s, %s, %s, %s, %s, %s, %s, %s)",
+                [(r.id, r.names.first_name, r.names.last_name, r.longitude, r.latitude, r.base_data_id, str(dataset_id), vector, r.names.full_names, r.addresses.address_lines, r.addresses.postal_code, r.addresses.country, r.phone_number) for r, vector in zip(skewed_records,graph_vectors)]
             )
             cursor.execute('''
                            UPDATE dataset

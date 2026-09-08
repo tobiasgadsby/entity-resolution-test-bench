@@ -2,11 +2,18 @@ import random
 
 from utilities.main import database_connection, database_cursor
 
-def swap_chars(s: str, i: int, j: int):
-    if len(s)-1 < j:
-        return s
+def swap_chars(s: str, count: int):
+    print(count)
+    end = len(s) - 1
+    count = min(count, len(s) // 2)
     lst = list(s)
-    lst[i],lst[j] = lst[j],lst[i]
+
+    for i in range(count):
+        i = random.randint(0, end)
+        j = random.randint(0, end)
+        lst[i],lst[j] = lst[j],lst[i]
+    print('before: ', s)
+    print('after: ', lst)
     return "".join(lst)
 
 def location_drift(longitude: float, latitude: float, max_drift: float):
